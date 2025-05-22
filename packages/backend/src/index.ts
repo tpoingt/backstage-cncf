@@ -1,5 +1,12 @@
-import { createBackend } from '@backstage/backend-defaults';
+/*
+ * Hi!
+ *
+ * Note that this is an EXAMPLE Backstage backend. Please check the README.
+ *
+ * Happy hacking!
+ */
 
+import { createBackend } from '@backstage/backend-defaults';
 
 const backend = createBackend();
 
@@ -14,11 +21,9 @@ backend.add(import('@backstage/plugin-auth-backend'));
 // See https://backstage.io/docs/backend-system/building-backends/migrating#the-auth-plugin
 backend.add(import('@backstage/plugin-auth-backend-module-guest-provider'));
 // See https://backstage.io/docs/auth/guest/provider
-backend.add(import('@backstage/plugin-auth-backend-module-github-provider'));
 
 // catalog plugin
 backend.add(import('@backstage/plugin-catalog-backend'));
-backend.add(import('@backstage/plugin-catalog-backend-module-github'));
 backend.add(
   import('@backstage/plugin-catalog-backend-module-scaffolder-entity-model'),
 );
@@ -47,7 +52,17 @@ backend.add(import('@backstage/plugin-search-backend-module-techdocs'));
 // kubernetes
 backend.add(import('@backstage/plugin-kubernetes-backend'));
 
-//linguist
-backend.add(import('@backstage-community/plugin-linguist-backend'));
+// backstage openapi generator
+backend.add(
+  import('@backstage/plugin-catalog-backend-module-backstage-openapi'),
+);
+
+// tech-insights
+backend.add(import('@backstage-community/plugin-tech-insights-backend'));
+backend.add(import('@backstage-community/plugin-tech-insights-backend-module-jsonfc'));
+backend.add(import('@alithya-oss/backstage-plugin-tech-insights-backend-module-catalog-entities'));
+
+// infrawallet
+backend.add(import('@electrolux-oss/plugin-infrawallet-backend'))
 
 backend.start();

@@ -57,12 +57,31 @@ import {
   EntityKubernetesContent,
   isKubernetesAvailable,
 } from '@backstage/plugin-kubernetes';
+
 import {
   EntityGithubActionsContent,
   isGithubActionsAvailable,
 } from '@backstage-community/plugin-github-actions';
 
 import { isLinguistAvailable, EntityLinguistCard } from '@backstage-community/plugin-linguist';
+
+import {
+  EntityPrometheusContent,
+  EntityPrometheusAlertCard,
+  EntityPrometheusGraphCard,
+  isPrometheusAvailable,
+} from '@roadiehq/backstage-plugin-prometheus';
+
+import {
+  EntityMaturitySummaryCard,
+  EntityMaturityScorecardContent,
+  EntityMaturitySummaryContent,
+} from '@backstage-community/plugin-tech-insights-maturity';
+
+import {
+  EntityInfraWalletCard,
+  isInfraWalletAvailable,
+} from '@electrolux-oss/plugin-infrawallet';
 
 const techdocsContent = (
   <EntityTechdocsContent>
@@ -77,8 +96,9 @@ const cicdContent = (
   // You can for example enforce that all components of type 'service' should use GitHubActions
   <EntitySwitch>
     <EntitySwitch.Case if={isGithubActionsAvailable}>
-        <EntityGithubActionsContent />
-      </EntitySwitch.Case>
+      <EntityGithubActionsContent />
+    </EntitySwitch.Case>
+
     <EntitySwitch.Case>
       <EmptyState
         title="No CI/CD available for this entity"
@@ -136,19 +156,43 @@ const overviewContent = (
       <EntityCatalogGraphCard variant="gridItem" height={400} />
     </Grid>
 
+    <EntitySwitch>
+      <EntitySwitch.Case if={isPrometheusAvailable}>
+        <Grid item md={8} xs={10}>
+          <EntityPrometheusAlertCard />
+        </Grid>
+        <Grid item md={4} xs={10}>
+          <EntityPrometheusGraphCard />
+        </Grid>
+      </EntitySwitch.Case>
+    </EntitySwitch>
+
+    <EntitySwitch>
+      <EntitySwitch.Case if={isInfraWalletAvailable}>
+        <Grid item md={6}>
+          <EntityInfraWalletCard />
+        </Grid>
+      </EntitySwitch.Case>
+    </EntitySwitch>
+
+    <Grid item md={6} xs={6}>
+      <EntityMaturitySummaryCard />
+    </Grid>
+
     <Grid item md={4} xs={12}>
       <EntityLinksCard />
     </Grid>
     <Grid item md={8} xs={12}>
       <EntityHasSubcomponentsCard variant="gridItem" />
     </Grid>
+
     <EntitySwitch>
-         <EntitySwitch.Case if={isLinguistAvailable}>
-             <Grid item md={6}>
-                 <EntityLinguistCard />
-             </Grid>
-         </EntitySwitch.Case>
-     </EntitySwitch>
+      <EntitySwitch.Case if={isLinguistAvailable}>
+        <Grid item md={6}>
+          <EntityLinguistCard />
+        </Grid>
+      </EntitySwitch.Case>
+    </EntitySwitch>
   </Grid>
 );
 
@@ -156,6 +200,10 @@ const serviceEntityPage = (
   <EntityLayout>
     <EntityLayout.Route path="/" title="Overview">
       {overviewContent}
+    </EntityLayout.Route>
+
+    <EntityLayout.Route path="/maturity" title="Maturity">
+      <EntityMaturityScorecardContent />
     </EntityLayout.Route>
 
     <EntityLayout.Route path="/ci-cd" title="CI/CD">
@@ -168,6 +216,14 @@ const serviceEntityPage = (
       if={isKubernetesAvailable}
     >
       <EntityKubernetesContent />
+    </EntityLayout.Route>
+
+    <EntityLayout.Route
+      path="/prometheus"
+      title="Prometheus"
+      if={isPrometheusAvailable}
+    >
+      <EntityPrometheusContent />
     </EntityLayout.Route>
 
     <EntityLayout.Route path="/api" title="API">
@@ -202,6 +258,10 @@ const websiteEntityPage = (
   <EntityLayout>
     <EntityLayout.Route path="/" title="Overview">
       {overviewContent}
+    </EntityLayout.Route>
+
+    <EntityLayout.Route path="/maturity" title="Maturity">
+      <EntityMaturityScorecardContent />
     </EntityLayout.Route>
 
     <EntityLayout.Route path="/ci-cd" title="CI/CD">
@@ -336,6 +396,10 @@ const groupPage = (
         </Grid>
       </Grid>
     </EntityLayout.Route>
+
+    <EntityLayout.Route path="/maturity" title="Maturity">
+      <EntityMaturitySummaryContent />
+    </EntityLayout.Route>
   </EntityLayout>
 );
 
@@ -383,6 +447,10 @@ const systemPage = (
         unidirectional={false}
       />
     </EntityLayout.Route>
+
+    <EntityLayout.Route path="/maturity" title="Maturity">
+      <EntityMaturitySummaryContent />
+    </EntityLayout.Route>
   </EntityLayout>
 );
 
@@ -401,6 +469,10 @@ const domainPage = (
           <EntityHasSystemsCard variant="gridItem" />
         </Grid>
       </Grid>
+    </EntityLayout.Route>
+
+    <EntityLayout.Route path="/maturity" title="Maturity">
+      <EntityMaturitySummaryContent />
     </EntityLayout.Route>
   </EntityLayout>
 );

@@ -35,7 +35,11 @@ import { AppRouter, FlatRoutes } from '@backstage/core-app-api';
 import { CatalogGraphPage } from '@backstage/plugin-catalog-graph';
 import { RequirePermission } from '@backstage/plugin-permission-react';
 import { catalogEntityCreatePermission } from '@backstage/plugin-catalog-common/alpha';
+
 import { githubAuthApiRef } from '@backstage/core-plugin-api';
+
+import { MaturityPage } from '@backstage-community/plugin-tech-insights-maturity';
+import { InfraWalletPage } from '@electrolux-oss/plugin-infrawallet';
 
 const app = createApp({
   apis,
@@ -57,16 +61,21 @@ const app = createApp({
     });
   },
   components: {
-    SignInPage: props => 
-      <SignInPage {...props} 
-        auto 
-        provider={{
-          id: 'github-auth-provider',
-          title: 'Github',
-          message: 'Sign in using Github', 
-          apiRef: githubAuthApiRef,
-        }} 
-      />,
+    SignInPage: props => (
+      <SignInPage
+        {...props}
+        auto
+        providers={[
+          'guest',
+          {
+            id: 'github-auth-provider',
+            title: 'GitHub',
+            message: 'Sign in using GitHub',
+            apiRef: githubAuthApiRef,
+          },
+        ]}
+      />
+    ),
   },
 });
 
@@ -104,6 +113,8 @@ const routes = (
     </Route>
     <Route path="/settings" element={<UserSettingsPage />} />
     <Route path="/catalog-graph" element={<CatalogGraphPage />} />
+    <Route path="/maturity" element={<MaturityPage />} />
+    <Route path="/infrawallet" element={<InfraWalletPage />} />
   </FlatRoutes>
 );
 

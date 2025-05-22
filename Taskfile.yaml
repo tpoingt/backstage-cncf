@@ -1,0 +1,229 @@
+# https://taskfile.dev
+
+version: '3'
+
+dotenv: ['.env']
+
+vars:
+  GREETING: Hello, World!
+
+tasks:
+  default:
+    cmds:
+      - echo "{{.GREETING}}"
+    silent: true
+
+  ci:verify:
+    desc: Pipeline d'intégration complet
+    summary: |
+      Exécution des étapes d'intégration incluant la généreation des rapports API et l'exécution des tests d'intégration.
+    env:
+      NODE_OPTIONS: --max-old-space-size=8192
+    cmds:
+      - cmd: yarn install --immutable
+      - task: verify:dedupe
+      - task: verify:local-deps
+      - task: verify:peer-deps
+      - task: verify:repo-fix
+      - task: verify:config
+      - cmd: yarn tsc
+      - task: verify:codeformat
+      - task: verify:type-deps
+      - cmd: yarn build:api-reports:only
+      - cmd: yarn backstage-cli repo lint --since origin/main
+      - cmd: yarn backstage-cli repo test --coverage --maxWorkers=3
+
+  verify:config:
+    desc: Validate config
+    cmds:
+      - yarn backstage-cli config:check --lax
+
+  verify:dedupe:
+    desc: Verify and fix lockfile duplicates
+    summary: Verify deduplicated dependencies with overlapping ranges
+    cmds:
+      - node scripts/verify-lockfile-duplicates.js yarn.lock
+
+  verify:doc-links:
+    desc: Verify links in documentation
+    cmds:
+      - node scripts/verify-links.js
+
+  verify:peer-deps:
+    desc: Verify peer dependency ranges
+    cmds:
+      - yarn backstage-repo-tools peer-deps
+
+  verify:type-deps:
+    desc: Verify type dependencies
+    cmds:
+      - yarn backstage-repo-tools type-deps
+
+  verify:local-deps:
+    desc: Verify local dependency ranges
+    cmds:
+      - node scripts/verify-local-dependencies.js
+
+  verify:codeformat:
+    desc: Verify code formatting
+    cmds:
+      - yarn prettier --check .
+
+  verify:repo-fix:
+    desc: Check for missing repo fixes
+    cmds:
+      - yarn backstage-cli repo fix --check
+
+  bump:framework:
+    desc: Update Backstage related packages
+    summary: |
+      Updates dependencies related to the latest Backstage version.
+      Impacts both `app` and `backend` packages, along with internally developped plugins.
+      (see: https://backstage.io/docs/getting-started/keeping-backstage-updated)
+    cmds:
+      - yarn install
+      - yarn backstage-cli versions:bump
+      # - task: ci:verify
+      - git add .
+      - git commit -a -m "Bump Backstage framework $(yq -r .version backstage.json)"
+
+  bump:plugins:
+    desc: Update Community plugins
+    summary: |
+      Updates dependencies related to plugins maintained by the open source community.
+      Impacts both `app` and `backend` packages, and occasionnaly internally developped plugins.
+      (see: https://backstage.io/docs/getting-started/keeping-backstage-updated)
+    vars:
+      SCOPES:
+        - alithya-oss
+        - backstage-community
+        - opentelemetry
+        - roadiehq
+    dir: ./
+    cmds:
+      - yarn install --immutable
+      - yarn backstage-cli versions:bump --pattern '{{ .SCOPES | join "," | printf "@{%s}/*" }}'
+      # - task: ci:check
+      - git add .
+      - git commit -a -m "Bump community plugins and dependencies"
+
+  build:oci:
+    cmds:
+      - |
+        docker image build \
+        --tag oci.local/alithya/backstage:dev \
+        --file containers/backend/Dockerfile \
+        ./
+  run:
+    desc: Run Backstage application in development mode
+    cmds:
+      - yarn install --immutable
+      - LOG_LEVEL=debug yarn start
+
+  run:load-test:
+    desc: Run load test
+    cmds:
+      - yarn install --immutable
+      - >
+        yarn artillery run
+        --env-file .env
+        load-test.yml
+
+  generate:slo:
+    desc: Generate Prometheus rules for Backstage app
+    cmds:
+      - mkdir -p packages/backend/monitoring
+      - >
+        curl -fsSL
+        -o 'packages/backend/monitoring/prometheus.yml'
+        https://raw.githubusercontent.com/backstage/backstage/refs/heads/master/packages/backend/prometheus.yml
+      - >
+        yq eval --inplace '
+        .scrape_configs[0].job_name = "backstage" |
+        .scrape_configs[1].job_name = "prometheus" |
+        .scrape_configs[1].static_configs[0].targets[0] = "localhost:9090"
+        ' packages/backend/monitoring/prometheus.yml
+      # - oslo validate -f demo/monitoring/slo-spec.v1alpha.yml
+      - >
+        sloth generate
+        -i demo/monitoring/sloth-spec.v1.yml
+        -o packages/backend/monitoring/backstage-rules.yml
+      - promtool check rules packages/backend/monitoring/backstage-rules.yml
+      - >
+        yq -i '.rule_files[0] = "backstage-rules.yml"
+        ' packages/backend/monitoring/prometheus.yml
+
+  install:k3s:
+    desc: Install K3s with Argo projects
+    cmds:
+      - curl -sfL https://get.k3s.io | sh -
+
+  install:crds:
+    desc: Install required
+    vars:
+      PROMETHEUS_CRDS_VERSION: 2.0.0
+    cmds:
+      - helm repo add prometheus-community https://prometheus-community.github.io/helm-charts
+      - helm repo update
+      - |
+        helm upgrade --install \
+        --version "{{.PROMETHEUS_CRDS_VERSION}}" \
+        prometheus-operator-crds prometheus-community/prometheus-operator-crds
+
+  install:argo-cd:
+    desc: Install ArgoCD
+    vars:
+      ARGO_CD_VERSION: latest
+    env:
+      ADMIN_PWD: admin
+    cmds:
+      - mkdir -p .bin/
+      - |
+        curl -fsSL -o .bin/argocd \
+        https://github.com/argoproj/argo-cd/releases/{{.ARGO_CD_VERSION}}/download/argocd-linux-amd64
+      - chmod +x .bin/argocd
+      - helm repo add argo https://argoproj.github.io/argo-helm
+      - helm repo update
+      - |
+        ADMIN_BCRYPT=$(.bin/argocd account bcrypt --password $ADMIN_PWD) \
+        helm upgrade --install \
+        --wait \
+        --namespace argo-cd \
+        --create-namespace \
+        --set configs.secret.argocdServerAdminPassword="${ADMIN_BCRYPT}" \
+        --set server.extraArgs[0]="--insecure" \
+        --set server.service.type="LoadBalancer" \
+        --set server.service.servicePortHttp="32080" \
+        --set controller.metrics.enabled="true" \
+        --set controller.metrics.serviceMonitor.enabled="true" \
+        --set dex.enabled="true" \
+        --set dex.metrics.enabled="true" \
+        --set dex.metrics.serviceMonitor.enabled="true" \
+        --set redis.metrics.enabled="true" \
+        --set redis.metrics.serviceMonitor.enabled="true" \
+        --set server.metrics.enabled="true" \
+        --set server.metrics.serviceMonitor.enabled="true" \
+        --set repoServer.metrics.enabled="true" \
+        --set repoServer.metrics.serviceMonitor.enabled="true" \
+        --set applicationSet.enabled="true" \
+        --set applicationSet.metrics.enabled="true" \
+        --set applicationSet.metrics.serviceMonitor.enabled="true" \
+        --set notifications.enabled="true" \
+        --set notifications.metrics.enabled="true" \
+        --set notifications.metrics.serviceMonitor.enabled="true" \
+        gitops argo/argo-cd
+      - |
+        argocd login  localhost:10080 --insecure --plaintext \
+        --username "admin" --password "${ADMIN_PWD}"
+      - |
+        kubectl -n argo-cd patch configmap/argocd-cm \
+        --type='json' \
+        --patch '[{"op": "add", "path": "/data/accounts.sysops", "value": "apiKey,login"}]'
+      - |
+        kubectl -n argo-cd patch configmap/argocd-cm \
+        --type='json' \
+        --patch '[{"op": "add", "path": "/data/accounts.backstage", "value": "apiKey,login"}]'
+      - |
+        kubectl -n argo-cd patch configmap/argocd-rbac-cm \
+        --type='json' \
+        --patch '[{"op": "add", "path": "/data/policy.csv", "value": "g, sysops, role:admin\ng, backstage, role:readonly\n"}]'

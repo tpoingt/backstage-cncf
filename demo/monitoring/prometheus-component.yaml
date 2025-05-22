@@ -1,0 +1,14 @@
+apiVersion: backstage.io/v1alpha1
+kind: Component
+metadata:
+  name: promehteus
+  description: A Prometheus instance associated to an example of a Backstage application.
+  # Example for optional annotations
+  annotations:
+    github.com/project-slug: alithya-oss/backstage-demo
+    # backstage.io/techdocs-ref: dir:.
+    # prometheus.io/alert:
+spec:
+  type: service
+  owner: guests
+  lifecycle: experimental
